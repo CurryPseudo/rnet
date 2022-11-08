@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace __ClassName__
+namespace __NamespaceName__
 {    
     public static class __ClassName__
     {

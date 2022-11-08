@@ -1,22 +1,26 @@
 use std::{collections::HashMap, ffi::OsStr, path::PathBuf};
 
 use anyhow::{anyhow, Context};
+use clap::Parser;
 use heck::{CamelCase, MixedCase};
 use libloading::Library;
-use structopt::StructOpt;
 
 use rnet::hidden::{GeneratorContext, LibDesc, VERSION};
 
 /// A basic example
-#[derive(StructOpt, Debug)]
-#[structopt(name = "rnet-gen")]
-pub struct Opt {
+#[derive(Parser, Debug)]
+pub struct Args {
     /// Path to shared library or DLL
-    #[structopt()]
     pub path: PathBuf,
-    /// Namespace and class name for generated cs files
-    #[structopt()]
-    pub name: Option<String>,
+    /// Class name for generated cs files
+    #[clap(short, long)]
+    pub lib_rename: Option<String>,
+    /// Class name for generated cs files
+    #[clap(short, long)]
+    pub class: Option<String>,
+    /// Namespace for generated cs files, default to be same as class name
+    #[clap(short, long)]
+    pub namespace: Option<String>,
 }
 
 type ReflectFn = extern "C" fn(usize, &mut LibDesc) -> bool;
@@ -24,14 +28,29 @@ type ReflectFn = extern "C" fn(usize, &mut LibDesc) -> bool;
 const COMMON: &str = include_str!("common.cs");
 
 fn generate_csharp_code<W: std::io::Write>(
-    _opt: &Opt,
-    name: &str,
+    args: &Args,
     desc: LibDesc,
     writer: &mut W,
 ) -> anyhow::Result<()> {
+    let libname = args
+        .lib_rename
+        .as_ref()
+        .map(String::as_str)
+        .unwrap_or_else(|| {
+            let mut libname = args.path.file_stem().unwrap().to_str().unwrap();
+            if args.path.extension() != Some(OsStr::new("dll")) {
+                if let Some(remainder) = libname.strip_prefix("lib") {
+                    libname = remainder;
+                }
+            }
+            libname
+        });
+    let class = args.class.as_ref().map(String::as_str).unwrap_or(libname);
+    let namespace = args.namespace.as_ref().map(String::as_str).unwrap_or(class);
     let common = COMMON
-        .replace("__ClassName__", &name.to_camel_case())
-        .replace("\"__LibName__\"", &format!("{:?}", name));
+        .replace("__NamespaceName__", &namespace.to_camel_case())
+        .replace("__ClassName__", &class.to_camel_case())
+        .replace("\"__LibName__\"", &format!("{:?}", libname));
     let mut parts = common.splitn(2, "// __Remainder__");
     let prefix = parts.next().unwrap();
     let suffix = parts.next().unwrap();
@@ -198,7 +217,7 @@ fn generate_csharp_code<W: std::io::Write>(
         writeln!(
             writer,
             "        [DllImport({:?}, EntryPoint = {:?}, CallingConvention = CallingConvention.Cdecl)]",
-            name, format!("rnet_export_{}", fn_desc.name)
+            libname, format!("rnet_export_{}", fn_desc.name)
         )?;
         writeln!(
             writer,
@@ -341,9 +360,9 @@ fn generate_csharp_code<W: std::io::Write>(
     Ok(())
 }
 
-pub fn gen<W: std::io::Write>(opt: Opt, writer: &mut W) -> anyhow::Result<()> {
+pub fn gen<W: std::io::Write>(args: Args, writer: &mut W) -> anyhow::Result<()> {
     unsafe {
-        let lib = Library::new(&opt.path).context("Failed to load library")?;
+        let lib = Library::new(&args.path).context("Failed to load library")?;
         let symbol = lib
             .get::<ReflectFn>(b"rnet_reflect")
             .context("Library does not link to `rnet-core`")?;
@@ -353,20 +372,7 @@ pub fn gen<W: std::io::Write>(opt: Opt, writer: &mut W) -> anyhow::Result<()> {
                 "Library was built against an incompatible version of `rnet-core`"
             ));
         }
-
-        let name = if let Some(s) = &opt.name {
-            s.as_str()
-        } else {
-            let mut name = opt.path.file_stem().unwrap().to_str().unwrap();
-            if opt.path.extension() != Some(OsStr::new("dll")) {
-                if let Some(remainder) = name.strip_prefix("lib") {
-                    name = remainder;
-                }
-            }
-            name
-        };
-
-        generate_csharp_code(&opt, name, desc, writer)?;
+        generate_csharp_code(&args, desc, writer)?;
     };
     Ok(())
 }
