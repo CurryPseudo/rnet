@@ -52,7 +52,7 @@ macro_rules! define_delegates {
                 #[allow(clippy::too_many_arguments)]
                 pub fn call(&self $(, $argname: impl ToNetArg<Owned = $arg>)*) -> TR {
                     unsafe {
-                        TR::from_raw_return(self.0.ptr::<fn($($arg::Raw),*) -> TR::RawReturn>()(
+                        TR::from_raw_return(self.0.ptr::<extern "C" fn($($arg::Raw),*) -> TR::RawReturn>()(
                             $($argname.to_owned_raw()),*
                         ))
                     }
