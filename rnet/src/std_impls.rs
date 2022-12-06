@@ -1,5 +1,4 @@
 use std::{
-    any::TypeId,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Display,
     hash::Hash,
@@ -8,6 +7,8 @@ use std::{
     str::from_boxed_utf8_unchecked,
     sync::Arc,
 };
+
+use unique_type_id::UniqueTypeId;
 
 use crate::{
     none_ty,
@@ -177,11 +178,11 @@ unsafe impl<T: ToNet> ToNet for Box<T> {
     }
 }
 
-fn int_type_id<T: 'static>() -> u64 {
-    unsafe { std::mem::transmute(TypeId::of::<T>()) }
+fn int_type_id<T: 'static + UniqueTypeId<u64>>() -> u64 {
+    T::TYPE_ID.0
 }
 
-unsafe impl<T: Send + Sync + 'static> Net for Arc<T> {
+unsafe impl<T: Send + Sync + 'static + UniqueTypeId<u64>> Net for Arc<T> {
     type Raw = RawOpaqueHandle;
 
     fn gen_type(_ctx: &mut GeneratorContext) -> Box<str> {
@@ -197,7 +198,7 @@ unsafe impl<T: Send + Sync + 'static> Net for Arc<T> {
     }
 }
 
-unsafe impl<T: Send + Sync + 'static> FromNet for Arc<T> {
+unsafe impl<T: Send + Sync + 'static + UniqueTypeId<u64>> FromNet for Arc<T> {
     unsafe fn from_raw(arg: Self::Raw) -> Self {
         Arc::increment_strong_count(arg.ptr as *const _);
         Arc::from_raw(arg.ptr as *const _)
@@ -208,7 +209,7 @@ unsafe impl<T: Send + Sync + 'static> FromNet for Arc<T> {
     }
 }
 
-unsafe impl<T: Send + Sync + 'static> ToNet for Arc<T> {
+unsafe impl<T: Send + Sync + 'static + UniqueTypeId<u64>> ToNet for Arc<T> {
     fn into_raw(self) -> Self::Raw {
         unsafe extern "C" fn rnet_drop_arc<T>(ptr: *mut ()) {
             Arc::from_raw(ptr as *const T);

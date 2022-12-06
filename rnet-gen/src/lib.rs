@@ -32,28 +32,22 @@ fn generate_csharp_code<W: std::io::Write>(
     desc: LibDesc,
     writer: &mut W,
 ) -> anyhow::Result<()> {
-    let libname = args
-        .lib_rename
-        .as_ref()
-        .map(String::as_str)
-        .unwrap_or_else(|| {
-            let mut libname = args.path.file_stem().unwrap().to_str().unwrap();
-            if args.path.extension() != Some(OsStr::new("dll")) {
-                if let Some(remainder) = libname.strip_prefix("lib") {
-                    libname = remainder;
-                }
+    let libname = args.lib_rename.as_deref().unwrap_or_else(|| {
+        let mut libname = args.path.file_stem().unwrap().to_str().unwrap();
+        if args.path.extension() != Some(OsStr::new("dll")) {
+            if let Some(remainder) = libname.strip_prefix("lib") {
+                libname = remainder;
             }
-            libname
-        });
-    let class = args.class.as_ref().map(String::as_str).unwrap_or(libname);
-    let namespace = args.namespace.as_ref().map(String::as_str).unwrap_or(class);
+        }
+        libname
+    });
+    let class = args.class.as_deref().unwrap_or(libname);
+    let namespace = args.namespace.as_deref().unwrap_or(class);
     let common = COMMON
         .replace("__NamespaceName__", &namespace.to_camel_case())
         .replace("__ClassName__", &class.to_camel_case())
         .replace("\"__LibName__\"", &format!("{:?}", libname));
-    let mut parts = common.splitn(2, "// __Remainder__");
-    let prefix = parts.next().unwrap();
-    let suffix = parts.next().unwrap();
+    let (prefix, suffix) = common.split_once("// __Remainder__").unwrap();
 
     let mut extra_items = Vec::new();
     let mut used_tuple_keys = HashMap::new();
