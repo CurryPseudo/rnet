@@ -251,7 +251,7 @@ fn derive_net_struct_impl(
                 }
 
                 fn is_nullable(_ctx: &mut #root::GeneratorContext) -> bool {
-                    true
+                    false
                 }
             }
 
